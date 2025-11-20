@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: snapp_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: snapp_dev
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - snapp_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: snapp_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - snapp_network
+
+  backend:
+    build: .
+    container_name: snapp_backend
+    environment:
+      FLASK_ENV: production
+      DATABASE_URL: mysql+pymysql://root:root_password@mysql:3306/snapp_dev
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      JWT_SECRET_KEY: your_jwt_secret_key
+      GEMINI_API_KEY: your_gemini_api_key
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - snapp_network
+    volumes:
+      - ./uploads:/app/uploads
+
+  celery_worker:
+    build: .
+    container_name: snapp_celery_worker
+    command: celery -A app.celery_app worker --loglevel=info
+    environment:
+      FLASK_ENV: production
+      DATABASE_URL: mysql+pymysql://root:root_password@mysql:3306/snapp_dev
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      JWT_SECRET_KEY: your_jwt_secret_key
+      GEMINI_API_KEY: your_gemini_api_key
+    depends_on:
+      - mysql
+      - redis
+      - backend
+    networks:
+      - snapp_network
+
+volumes:
+  mysql_data:
+
+networks:
+  snapp_network:
+    driver: bridge
